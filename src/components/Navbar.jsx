@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+
+const LAUNCHER_URL = import.meta.env.VITE_LAUNCHER_URL
 
 export default function Navbar() {
   const { user, logout } = useAuth()
-  const navigate = useNavigate()
   // Classes base para acessibilidade e interação: focus primeiro, depois hover
   const linkBase = 'px-2 py-1 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary-700 hover:bg-white/10'
   const navItem = ({ isActive }) => `${linkBase} ${isActive ? 'text-white font-semibold' : 'text-white/80 hover:text-white'}`
@@ -12,7 +13,9 @@ export default function Navbar() {
 
   function handleLogout() {
     logout()
-    navigate('/login', { replace: true })
+    if (LAUNCHER_URL) {
+      window.location.href = LAUNCHER_URL
+    }
   }
 
   return (
