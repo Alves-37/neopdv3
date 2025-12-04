@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -10,6 +10,17 @@ export default function Navbar() {
   const linkBase = 'px-2 py-1 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary-700 hover:bg-white/10'
   const navItem = ({ isActive }) => `${linkBase} ${isActive ? 'text-white font-semibold' : 'text-white/80 hover:text-white'}`
   const [open, setOpen] = useState(false)
+  const [estabNome, setEstabNome] = useState('')
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const nome = params.get('launcher_estab_nome') || ''
+      if (nome) setEstabNome(nome)
+    } catch {
+      // ignore
+    }
+  }, [])
 
   function handleLogout() {
     logout()
@@ -24,13 +35,12 @@ export default function Navbar() {
         <div className="flex h-14 items-center justify-between">
           {/* Brand */}
           <div className="flex items-center min-w-0">
-            <Link to="/" className={`text-lg font-bold text-white whitespace-nowrap rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary-700`}>
-              Bem vindo(a)
+            <Link
+              to="/"
+              className={`text-lg font-bold text-white whitespace-nowrap rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary-700`}
+            >
+              {`Bem vindo(a) ${estabNome || user?.nome || user?.usuario || ''}`}
             </Link>
-            {/* Nome do usuário ao lado da marca */}
-            <span className="ml-2 text-sm text-white/80 truncate max-w-[140px] font-bold">
-              {user?.nome || user?.usuario || ''}
-            </span>
           </div>
 
           {/* Desktop nav */}
