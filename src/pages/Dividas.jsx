@@ -214,6 +214,7 @@ export default function Dividas() {
                       Dívida {d.id_local != null ? `#${d.id_local}` : ''}
                     </h3>
                     <div className="text-xs sm:text-sm text-gray-500">Cliente: {d.cliente_nome || '—'}</div>
+                    <div className="text-xs sm:text-sm text-gray-500">Vendedor: {d.usuario_nome || '—'}</div>
                     <div className="text-xs sm:text-sm text-gray-500">Data: {fmtData(d.data_divida)}</div>
                     {d.observacao && (
                       <div className="mt-1 text-xs text-gray-600 line-clamp-2" title={d.observacao}>{d.observacao}</div>
@@ -254,6 +255,7 @@ export default function Dividas() {
             </div>
             <div className="text-sm text-gray-600">
               <div>Cliente: <b>{selectedDivida.cliente_nome || '—'}</b></div>
+              <div>Vendedor: <b>{selectedDivida.usuario_nome || '—'}</b></div>
               <div>Total: <b>{fmtMT(selectedDivida.valor_total)}</b></div>
               <div>Pago: <b>{fmtMT(selectedDivida.valor_pago)}</b></div>
               <div>Restante: <b>{fmtMT(Math.max(0, Number(selectedDivida.valor_total ?? 0) - Number(selectedDivida.valor_pago ?? 0)))}</b></div>
@@ -292,6 +294,7 @@ export default function Dividas() {
               <div><span className="text-gray-500">ID Local:</span> <b>{selectedDivida.id_local ?? '—'}</b></div>
               <div><span className="text-gray-500">UUID:</span> <b className="break-all">{selectedDivida.id || '—'}</b></div>
               <div className="sm:col-span-2"><span className="text-gray-500">Cliente:</span> <b>{selectedDivida.cliente_nome || '—'}</b></div>
+              <div className="sm:col-span-2"><span className="text-gray-500">Vendedor:</span> <b>{selectedDivida.usuario_nome || '—'}</b></div>
               <div><span className="text-gray-500">Data:</span> <b>{fmtData(selectedDivida.data_divida)}</b></div>
               <div><span className="text-gray-500">Status:</span> <b>{selectedDivida.status}</b></div>
               <div><span className="text-gray-500">Total:</span> <b>{fmtMT(selectedDivida.valor_total)}</b></div>
