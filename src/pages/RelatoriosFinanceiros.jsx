@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api } from '../services/api'
+import { api, API_BASE_URL } from '../services/api'
 
 export default function RelatoriosFinanceiros() {
   const today = useMemo(() => new Date(), [])
@@ -83,7 +83,10 @@ export default function RelatoriosFinanceiros() {
         const pid = it.produto_id || it.produto?.id
         const precoUnit = Number(it.preco_unitario ?? 0)
         const qtd = Number(it.peso_kg && it.peso_kg > 0 ? it.peso_kg : (it.quantidade ?? 0))
-        const custoUnit = Number(custoPorProduto[pid] ?? 0)
+        const custoItem = Number(it.preco_custo_unitario ?? 0)
+        const custoUnit = (Number.isFinite(custoItem) && custoItem > 0)
+          ? custoItem
+          : Number(custoPorProduto[pid] ?? 0)
         faturamento += precoUnit * qtd
         custo += custoUnit * qtd
         itensTotal += qtd
@@ -151,7 +154,7 @@ export default function RelatoriosFinanceiros() {
             title="Baixar relatório de vendas em PDF"
             onClick={async () => {
               try {
-                const base = import.meta.env.VITE_API_BASE_URL
+                const base = API_BASE_URL
                 const token = localStorage.getItem('access_token')
                 const qs = new URLSearchParams()
                 if (inicio) qs.set('data_inicio', inicio)
@@ -183,7 +186,7 @@ export default function RelatoriosFinanceiros() {
             title="Baixar relatório financeiro em PDF"
             onClick={async () => {
               try {
-                const base = import.meta.env.VITE_API_BASE_URL
+                const base = API_BASE_URL
                 const token = localStorage.getItem('access_token')
                 const qs = new URLSearchParams()
                 if (inicio) qs.set('data_inicio', inicio)
@@ -219,7 +222,7 @@ export default function RelatoriosFinanceiros() {
                   alert('Defina uma data inicial para determinar o mês.');
                   return;
                 }
-                const base = import.meta.env.VITE_API_BASE_URL
+                const base = API_BASE_URL
                 const token = localStorage.getItem('access_token')
                 const d = new Date(inicio)
                 const ano = d.getFullYear()

@@ -1,5 +1,9 @@
 // Simple API client using fetch, with base URL and auth token
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+export const API_BASE_URL = String(RAW_BASE_URL || '')
+  .replace(/\/+$/, '')
+  .replace(/\/api$/, '');
 
 async function request(path, { method = 'GET', body, headers = {}, auth = true } = {}) {
   const token = auth ? localStorage.getItem('access_token') : null;
@@ -151,6 +155,11 @@ export const api = {
     if (ordenacao) qs.set('ordenacao', ordenacao)
     return request(`/api/abastecimentos/historico?${qs.toString()}`)
   },
+
+  createAbastecimentosBulk: (items) => request('/api/abastecimentos/bulk', {
+    method: 'POST',
+    body: { items: Array.isArray(items) ? items : [] },
+  }),
 };
 
 export default api;

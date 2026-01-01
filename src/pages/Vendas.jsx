@@ -138,6 +138,51 @@ export default function Vendas() {
     } catch { return `${v}` }
   }
 
+  const getDescontoInfo = (venda) => {
+    try {
+      const raw = (
+        venda?.desconto ??
+        venda?.desconto_aplicado ??
+        venda?.valor_desconto ??
+        venda?.desconto_valor ??
+        0
+      )
+      const desconto = Number(raw || 0)
+      const perc = Number(venda?.percentual_desconto ?? venda?.desconto_percentual ?? venda?.percentual ?? 0)
+      const aplicado = desconto > 0 || perc > 0
+      return { aplicado, desconto, perc }
+    } catch {
+      return { aplicado: false, desconto: 0, perc: 0 }
+    }
+  }
+
+  const getIvaInfo = (venda) => {
+    try {
+      const flag = venda?.com_iva ?? venda?.iva_incluso ?? venda?.aplicar_iva ?? venda?.inclui_iva
+      if (typeof flag === 'boolean') {
+        const totalIva = Number(venda?.total_iva ?? venda?.iva_total ?? venda?.valor_iva ?? 0)
+        const taxa = Number(venda?.taxa_iva ?? venda?.iva_percentual ?? 0)
+        return { comIva: flag, totalIva, taxa }
+      }
+
+      const itens = Array.isArray(venda?.itens) ? venda.itens : []
+      let taxa = 0
+      let totalIva = 0
+      for (const it of itens) {
+        const t = Number(it?.taxa_iva ?? it?.iva_percentual ?? it?.iva ?? 0)
+        if (t > taxa) taxa = t
+        const v = Number(it?.valor_iva ?? it?.iva_valor ?? it?.iva_total ?? 0)
+        if (v) totalIva += v
+      }
+      const totalIvaVenda = Number(venda?.total_iva ?? venda?.iva_total ?? venda?.valor_iva ?? 0)
+      if (totalIvaVenda) totalIva = totalIvaVenda
+      const comIva = taxa > 0 || totalIva > 0
+      return { comIva, totalIva, taxa }
+    } catch {
+      return { comIva: false, totalIva: 0, taxa: 0 }
+    }
+  }
+
   // Calcula total a partir dos itens quando possível (subtotais - desconto)
   const calcTotal = (venda) => {
     try {
@@ -326,6 +371,28 @@ export default function Vendas() {
               <div>
                 <div className="text-xs text-gray-500">Forma de pagamento</div>
                 <div className="font-medium">{selected.forma_pagamento || '—'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Desconto</div>
+                {(() => {
+                  const d = getDescontoInfo(selected)
+                  if (!d.aplicado) return <div className="font-medium">Sem desconto</div>
+                  const parts = []
+                  if (d.desconto > 0) parts.push(fmtMT(d.desconto))
+                  if (d.perc > 0) parts.push(`${Number(d.perc).toFixed(2)}%`)
+                  return <div className="font-medium">{parts.join(' • ') || 'Aplicado'}</div>
+                })()}
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">IVA</div>
+                {(() => {
+                  const i = getIvaInfo(selected)
+                  if (!i.comIva) return <div className="font-medium">Sem IVA</div>
+                  const parts = []
+                  if (i.taxa > 0) parts.push(`${Number(i.taxa).toFixed(2)}%`)
+                  if (i.totalIva > 0) parts.push(fmtMT(i.totalIva))
+                  return <div className="font-medium">Com IVA{parts.length ? ` (${parts.join(' • ')})` : ''}</div>
+                })()}
               </div>
             </div>
 

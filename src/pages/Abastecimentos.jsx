@@ -1,23 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import api from '../services/api'
-
-function Modal({ isOpen, onClose, children }) {
-  if (!isOpen) return null
-  
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 transition-opacity" onClick={onClose}>
-          <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-        </div>
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          {children}
-        </div>
-      </div>
-    </div>
-  )
-}
+import Modal from '../components/Modal'
 
 export default function Abastecimentos() {
   const [loading, setLoading] = useState(false)
@@ -38,6 +21,171 @@ export default function Abastecimentos() {
   const [showSugestoes, setShowSugestoes] = useState(false)
   const [usuarioId, setUsuarioId] = useState('')
   const [ordenacao, setOrdenacao] = useState('created_at_desc')
+
+  const [usuarios, setUsuarios] = useState([])
+
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [novoFornecedor, setNovoFornecedor] = useState('Fornecedor Padrão')
+  const [novoBusca, setNovoBusca] = useState('')
+  const [novoCodigo, setNovoCodigo] = useState('')
+  const [novoCategoriaId, setNovoCategoriaId] = useState('')
+  const [categorias, setCategorias] = useState([])
+  const [novoProdutosAll, setNovoProdutosAll] = useState([])
+  const [novoProdutos, setNovoProdutos] = useState([])
+  const [novoProdutoId, setNovoProdutoId] = useState('')
+  const [novoProdutoObj, setNovoProdutoObj] = useState(null)
+  const [novoDescricao, setNovoDescricao] = useState('')
+  const [novoPrecoCusto, setNovoPrecoCusto] = useState('')
+  const [novoPrecoVenda, setNovoPrecoVenda] = useState('')
+  const [novoQtd, setNovoQtd] = useState('')
+  const [novoCusto, setNovoCusto] = useState('')
+
+  // Evita que o useEffect de filtros limpe seleção quando os campos são atualizados
+  // automaticamente ao selecionar um produto.
+  const selectingProdutoRef = useRef(false)
+
+  const getLoggedUsuarioId = () => {
+    try {
+      const raw = localStorage.getItem('user')
+      if (!raw) return undefined
+      const u = JSON.parse(raw)
+      const v = u?.id || u?.uuid || u?.usuario_id
+      if (!v) return undefined
+      return String(v)
+    } catch (e) {
+      return undefined
+    }
+  }
+
+  function handleNovoProdutoSelect(p) {
+    selectingProdutoRef.current = true
+    setNovoProdutoId(p?.id || '')
+    setNovoProdutoObj(p || null)
+
+    setNovoDescricao(p?.descricao ?? '')
+    setNovoPrecoCusto(String(p?.preco_custo ?? p?.custo ?? ''))
+    setNovoPrecoVenda(String(p?.preco_venda ?? p?.preco ?? ''))
+    setNovoCodigo(p?.codigo ?? '')
+    setNovoCategoriaId(p?.categoria_id != null ? String(p.categoria_id) : '')
+
+    try {
+      const custo = Number(p?.preco_custo ?? p?.custo ?? '')
+      if (Number.isFinite(custo)) {
+        setNovoCusto(String(custo))
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Soltar a trava no próximo tick.
+    setTimeout(() => {
+      selectingProdutoRef.current = false
+    }, 0)
+  }
+
+  function clearNovoProduto() {
+    setNovoProdutoId('')
+    setNovoProdutoObj(null)
+    setNovoDescricao('')
+    setNovoPrecoCusto('')
+    setNovoPrecoVenda('')
+  }
+
+  // Carregar categorias (para filtro no modal de criação)
+  useEffect(() => {
+    let mounted = true
+    async function loadCats() {
+      try {
+        const data = await api.getCategorias()
+        const arr = Array.isArray(data) ? data : (data?.items || [])
+        if (mounted) setCategorias(arr)
+      } catch (e) {
+        if (mounted) setCategorias([])
+      }
+    }
+    loadCats()
+    return () => { mounted = false }
+  }, [])
+
+  // Carregar todos os produtos ao abrir o modal (para permitir busca por 1 letra via filtro local)
+  useEffect(() => {
+    if (!createOpen) return
+    let active = true
+    ;(async () => {
+      try {
+        const result = await api.getProdutos('')
+        if (!active) return
+        const arr = Array.isArray(result) ? result : (result?.items || [])
+        setNovoProdutosAll(arr)
+      } catch (e) {
+        if (!active) return
+        setNovoProdutosAll([])
+      }
+    })()
+    return () => { active = false }
+  }, [createOpen])
+
+  // Buscar produtos para o modal (filtros: busca/código/categoria) - filtro local
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      const termo = (novoBusca || '').trim().toLowerCase()
+      const codigo = (novoCodigo || '').trim().toLowerCase()
+      const cat = String(novoCategoriaId || '')
+
+      const base = Array.isArray(novoProdutosAll) ? novoProdutosAll : []
+      let arr = base
+
+      if (termo) {
+        arr = arr.filter(p => {
+          const nome = String(p?.nome || p?.descricao || '').toLowerCase()
+          const cod = String(p?.codigo || '').toLowerCase()
+          return nome.includes(termo) || cod.includes(termo)
+        })
+      }
+      if (codigo) {
+        arr = arr.filter(p => String(p?.codigo || '').toLowerCase().includes(codigo))
+      }
+      if (cat) {
+        arr = arr.filter(p => String(p?.categoria_id ?? '') === cat)
+      }
+      setNovoProdutos(arr.slice(0, 80))
+    }, 200)
+
+    return () => clearTimeout(handle)
+  }, [novoBusca, novoCodigo, novoCategoriaId])
+
+  async function buscarProdutosModalAgora() {
+    const termo = (novoBusca || '').trim().toLowerCase()
+    const codigo = (novoCodigo || '').trim().toLowerCase()
+    const cat = String(novoCategoriaId || '')
+
+    const base = Array.isArray(novoProdutosAll) ? novoProdutosAll : []
+    let arr = base
+
+    if (termo) {
+      arr = arr.filter(p => {
+        const nome = String(p?.nome || p?.descricao || '').toLowerCase()
+        const cod = String(p?.codigo || '').toLowerCase()
+        return nome.includes(termo) || cod.includes(termo)
+      })
+    }
+    if (codigo) {
+      arr = arr.filter(p => String(p?.codigo || '').toLowerCase().includes(codigo))
+    }
+    if (cat) {
+      arr = arr.filter(p => String(p?.categoria_id ?? '') === cat)
+    }
+    setNovoProdutos(arr.slice(0, 80))
+  }
+
+  // Ao alterar filtros, limpar seleção atual (igual ao fluxo do PDV3)
+  useEffect(() => {
+    if (selectingProdutoRef.current) return
+    clearNovoProduto()
+    setNovoCusto('')
+    setNovoQtd('')
+  }, [novoBusca, novoCodigo, novoCategoriaId])
 
   // Verificar tamanho da tela
   useEffect(() => {
@@ -74,6 +222,22 @@ export default function Abastecimentos() {
 
   useEffect(() => { load() }, [params])
 
+  // Carregar usuários (para filtro e para registrar abastecimento com usuário associado)
+  useEffect(() => {
+    let mounted = true
+    async function loadUsers() {
+      try {
+        const data = await api.getUsuarios()
+        const arr = Array.isArray(data) ? data : (data?.items || [])
+        if (mounted) setUsuarios(arr)
+      } catch (e) {
+        if (mounted) setUsuarios([])
+      }
+    }
+    loadUsers()
+    return () => { mounted = false }
+  }, [])
+
   // Autocomplete de produtos (debounce simples)
   useEffect(() => {
     let active = true
@@ -87,7 +251,7 @@ export default function Abastecimentos() {
         const result = await api.getProdutos(q)
         if (!active) return
         setProdutoSugestoes(Array.isArray(result) ? result.slice(0, 10) : [])
-      } catch {
+      } catch (e) {
         if (!active) return
         setProdutoSugestoes([])
       }
@@ -221,13 +385,21 @@ export default function Abastecimentos() {
 
   return (
     <div className="p-2 sm:p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
         <h1 className="text-xl font-semibold">Histórico de Abastecimentos</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="px-5 py-3 text-base font-semibold text-white bg-primary-600 rounded-md hover:bg-primary-700 w-full sm:w-auto"
+            title="Registrar abastecimento"
+          >
+            Novo abastecimento
+          </button>
           <button 
             type="button" 
             onClick={() => setShowFilters(!showFilters)}
-            className="px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            className="px-4 py-3 text-base text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 w-full sm:w-auto"
             aria-label="Filtros"
           >
             {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
@@ -251,6 +423,192 @@ export default function Abastecimentos() {
           </div>
         </div>
       </div>
+
+      {/* Modal: Criar abastecimento */}
+      <Modal
+        open={createOpen}
+        title="Novo abastecimento"
+        onClose={() => { if (!creating) setCreateOpen(false) }}
+        actions={(
+          <>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => { if (!creating) setCreateOpen(false) }}
+              disabled={creating}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={creating}
+              onClick={async () => {
+                setError('')
+                const quantidade = Number(String(novoQtd || '').replace(',', '.'))
+                const custo_unitario = Number(String(novoCusto || '').replace(',', '.'))
+                if (!novoProdutoId) { alert('Selecione um produto'); return }
+                if (!Number.isFinite(quantidade) || quantidade <= 0) { alert('Quantidade inválida'); return }
+                if (!Number.isFinite(custo_unitario) || custo_unitario < 0) { alert('Custo unitário inválido'); return }
+
+                try {
+                  setCreating(true)
+                  const item = {
+                    produto_id: novoProdutoId,
+                    usuario_id: getLoggedUsuarioId(),
+                    quantidade,
+                    custo_unitario,
+                  }
+                  const resp = await api.createAbastecimentosBulk([item])
+                  if (!resp || resp.inserted < 1) {
+                    const reason = (resp?.conflicts && resp.conflicts[0] && (resp.conflicts[0].reason || resp.conflicts[0].message))
+                    throw new Error(reason || 'Falha ao registrar abastecimento')
+                  }
+                  clearNovoProduto()
+                  setNovoFornecedor('Fornecedor Padrão')
+                  setNovoBusca('')
+                  setNovoCodigo('')
+                  setNovoCategoriaId('')
+                  setNovoProdutos([])
+                  setNovoQtd('')
+                  setNovoCusto('')
+                  setCreateOpen(false)
+                  await load()
+                } catch (ex) {
+                  alert(ex?.message || 'Erro ao registrar abastecimento')
+                } finally {
+                  setCreating(false)
+                }
+              }}
+            >
+              {creating ? 'Salvando...' : 'Registrar'}
+            </button>
+          </>
+        )}
+      >
+        <div className="space-y-4">
+          <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-gray-500">Fornecedor</div>
+                <input
+                  className="input w-full mt-1"
+                  value={novoFornecedor}
+                  onChange={(e) => setNovoFornecedor(e.target.value)}
+                  placeholder="Fornecedor"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Buscar</div>
+                <input
+                  className="input w-full mt-1"
+                  value={novoBusca}
+                  onChange={(e) => setNovoBusca(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      buscarProdutosModalAgora()
+                    }
+                  }}
+                  placeholder="Buscar produto"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Código</div>
+                <input
+                  className="input w-full mt-1"
+                  value={novoCodigo}
+                  onChange={(e) => setNovoCodigo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      buscarProdutosModalAgora()
+                    }
+                  }}
+                  placeholder="Código"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Categoria</div>
+                <select
+                  className="input w-full mt-1"
+                  value={novoCategoriaId}
+                  onChange={(e) => setNovoCategoriaId(e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  {categorias.map((c) => (
+                    <option key={c.id || c.nome} value={String(c.id)}>
+                      {c.nome || c.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <div className="text-xs text-gray-500">Produto</div>
+                <select
+                  className="input w-full mt-1"
+                  value={novoProdutoId}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    setNovoProdutoId(id)
+                    const p = novoProdutos.find(x => String(x.id || x.uuid) === String(id))
+                    if (p) handleNovoProdutoSelect(p)
+                  }}
+                >
+                  <option value="">Selecione um produto</option>
+                  {novoProdutos.map((p) => (
+                    <option key={p.id || p.uuid || p.codigo} value={String(p.id || p.uuid)}>
+                      {(p.nome || p.descricao || 'Produto')}{p.codigo ? ` (${p.codigo})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-500">Descrição do produto</div>
+            <textarea
+              className="input w-full mt-1"
+              rows={2}
+              value={novoDescricao}
+              readOnly
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <div className="text-xs text-gray-500">Preço custo</div>
+              <input className="input w-full mt-1" value={novoPrecoCusto} readOnly />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Preço venda</div>
+              <input className="input w-full mt-1" value={novoPrecoVenda} readOnly />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Custo unitário (editar)</div>
+              <input
+                className="input w-full mt-1"
+                value={novoCusto}
+                onChange={(e) => setNovoCusto(e.target.value)}
+                inputMode="decimal"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs text-gray-500">Quantidade</div>
+            <input
+              className="input w-full mt-1"
+              value={novoQtd}
+              onChange={(e) => setNovoQtd(e.target.value)}
+              inputMode="decimal"
+              placeholder="Digite a quantidade"
+            />
+          </div>
+
+        </div>
+      </Modal>
 
       {/* Filtros - Mobile (colapsável) */}
       <div className={`mb-4 ${!showFilters && 'hidden'} md:block`}>
@@ -522,7 +880,7 @@ export default function Abastecimentos() {
         </button>
       </div>
       {/* Modal de Detalhes */}
-      <Modal isOpen={!!selectedItem} onClose={() => setSelectedItem(null)}>
+      <Modal open={!!selectedItem} title="Detalhes do Abastecimento" onClose={() => setSelectedItem(null)}>
         <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
           <div className="sm:flex sm:items-start">
             <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">

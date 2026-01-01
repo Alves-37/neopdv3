@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api } from '../services/api'
+import { api, API_BASE_URL } from '../services/api'
 import Modal from '../components/Modal'
 import ProductForm from '../components/ProductForm'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -123,7 +123,7 @@ export default function Produtos() {
             onClick={async () => {
               try {
                 const token = localStorage.getItem('access_token')
-                const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/relatorios/produtos`, {
+                const res = await fetch(`${API_BASE_URL}/api/relatorios/produtos`, {
                   headers: token ? { Authorization: `Bearer ${token}` } : {},
                 })
                 if (!res.ok) {
@@ -152,7 +152,7 @@ export default function Produtos() {
             onClick={async () => {
               try {
                 const token = localStorage.getItem('access_token')
-                const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/relatorios/produtos?baixo_estoque=true`, {
+                const res = await fetch(`${API_BASE_URL}/api/relatorios/produtos?baixo_estoque=true`, {
                   headers: token ? { Authorization: `Bearer ${token}` } : {},
                 })
                 if (!res.ok) {

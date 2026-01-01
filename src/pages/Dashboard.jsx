@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import api from '../services/api'
+import api, { API_BASE_URL } from '../services/api'
 
 export default function Dashboard() {
   const [metricas, setMetricas] = useState({
@@ -48,14 +48,16 @@ export default function Dashboard() {
       setLoading(true)
       setError(null)
       try {
-        const base = import.meta.env.VITE_API_BASE_URL
+        const base = API_BASE_URL
         const hoje = new Date()
         const ymdHoje = toYMD(hoje)
         const anoMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
-        // 1) Buscar vendas_dia e vendas_mes do servidor com parâmetros explícitos
-        const [dia, mes] = await Promise.all([
+        // 1) Buscar vendas_dia/vendas_mes e lucro_dia/lucro_mes do servidor com parâmetros explícitos
+        const [dia, mes, lucroDiaSrv, lucroMesSrv] = await Promise.all([
           fetch(`${base}/api/metricas/vendas-dia?data=${ymdHoje}`).then(r => r.ok ? r.json() : null).catch(() => null),
           fetch(`${base}/api/metricas/vendas-mes?ano_mes=${anoMes}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`${base}/api/metricas/lucro-dia?data=${ymdHoje}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`${base}/api/metricas/lucro-mes?ano_mes=${anoMes}`).then(r => r.ok ? r.json() : null).catch(() => null),
         ])
 
         // 2) Tentar obter métricas de estoque direto do backend (alinhado com PDV3)
@@ -63,9 +65,13 @@ export default function Dashboard() {
         let valorPotencial = null
         try {
           const mEstoque = await api.getMetricasEstoque()
-          if (mEstoque && typeof mEstoque.valor_estoque === 'number' && typeof mEstoque.valor_potencial === 'number') {
-            valorEstoque = Number(mEstoque.valor_estoque)
-            valorPotencial = Number(mEstoque.valor_potencial)
+          if (mEstoque) {
+            const ve = Number(mEstoque.valor_estoque)
+            const vp = Number(mEstoque.valor_potencial)
+            if (Number.isFinite(ve) && Number.isFinite(vp)) {
+              valorEstoque = ve
+              valorPotencial = vp
+            }
           }
         } catch { /* ignora e cai no fallback local */ }
 
@@ -89,7 +95,8 @@ export default function Dashboard() {
           for (const p of produtos) {
             // Filtrar somente ativos (se campo não existir, assume ativo)
             if (p.ativo === false) continue
-            const estoque = Number(p.estoque ?? p.quantidade_estoque ?? 0)
+            const estoqueBruto = Number(p.estoque ?? p.quantidade_estoque ?? 0)
+            const estoque = Number.isFinite(estoqueBruto) ? Math.max(0, estoqueBruto) : 0
             const precoVenda = Number(p.preco_venda ?? p.preco ?? 0)
             const precoCusto = Number(p.preco_custo ?? p.custo ?? 0)
             if (Number.isFinite(estoque) && Number.isFinite(precoCusto)) {
@@ -107,55 +114,59 @@ export default function Dashboard() {
           baixoEstoqueCount = lowCount
         } catch { /* mantém null se falhar */ }
 
-        // 3) Calcular localmente lucro do dia e do mês via /api/vendas/periodo
-        let lucroDia = null
-        let lucroMes = null
-        try {
-          const hoje = new Date()
-          const ymdHoje = toYMD(hoje)
-          const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-          const ymdInicioMes = toYMD(inicioMes)
+        // 3) Fallback: se endpoints de lucro não estiverem disponíveis, calcular localmente via /api/vendas/periodo
+        let lucroDia = (typeof lucroDiaSrv?.total === 'number') ? Number(lucroDiaSrv.total) : null
+        let lucroMes = (typeof lucroMesSrv?.total === 'number') ? Number(lucroMesSrv.total) : null
+        if (lucroDia == null || lucroMes == null) {
+          try {
+            const hoje = new Date()
+            const ymdHoje = toYMD(hoje)
+            const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+            const ymdInicioMes = toYMD(inicioMes)
 
-          // Buscar produtos para mapear custo por produto
-          const produtosData2 = await api.getProdutos('')
-          const produtos2 = Array.isArray(produtosData2) ? produtosData2 : (produtosData2?.items || [])
-          const custoPorProduto = {}
-          for (const p of produtos2) {
-            const key = p.id || p.uuid
-            if (!key) continue
-            custoPorProduto[key] = Number(p.preco_custo ?? p.custo ?? 0)
-          }
-
-          // Função para calcular lucro de uma lista de vendas
-          const calcLucro = (vendas) => {
-            let lucro = 0
-            for (const v of vendas) {
-              const itens = v.itens || []
-              for (const it of itens) {
-                const pid = it.produto_id || it.produto?.id
-                const precoUnit = Number(it.preco_unitario ?? 0)
-                const qtd = Number(it.peso_kg && it.peso_kg > 0 ? it.peso_kg : (it.quantidade ?? 0))
-                const custo = Number(custoPorProduto[pid] ?? 0)
-                lucro += (precoUnit - custo) * qtd
-              }
+            // Buscar produtos para mapear custo por produto
+            const produtosData2 = await api.getProdutos('')
+            const produtos2 = Array.isArray(produtosData2) ? produtosData2 : (produtosData2?.items || [])
+            const custoPorProduto = {}
+            for (const p of produtos2) {
+              const key = p.id || p.uuid
+              if (!key) continue
+              custoPorProduto[key] = Number(p.preco_custo ?? p.custo ?? 0)
             }
-            return lucro
-          }
 
-          // Lucro do dia
-          try {
-            const vendasDia = await api.getVendasPeriodo(ymdHoje, ymdHoje)
-            const arrDia = Array.isArray(vendasDia) ? vendasDia : (vendasDia?.items || [])
-            lucroDia = calcLucro(arrDia)
-          } catch { /* leave null */ }
+            // Função para calcular lucro de uma lista de vendas
+            const calcLucro = (vendas) => {
+              let lucro = 0
+              for (const v of vendas) {
+                const itens = v.itens || []
+                for (const it of itens) {
+                  const pid = it.produto_id || it.produto?.id
+                  const precoUnit = Number(it.preco_unitario ?? 0)
+                  const qtd = Number(it.peso_kg && it.peso_kg > 0 ? it.peso_kg : (it.quantidade ?? 0))
+                  const custo = Number(custoPorProduto[pid] ?? 0)
+                  lucro += (precoUnit - custo) * qtd
+                }
+              }
+              return lucro
+            }
 
-          // Lucro do mês (1º dia até hoje)
-          try {
-            const vendasMes = await api.getVendasPeriodo(ymdInicioMes, ymdHoje)
-            const arrMes = Array.isArray(vendasMes) ? vendasMes : (vendasMes?.items || [])
-            lucroMes = calcLucro(arrMes)
-          } catch { /* leave null */ }
-        } catch { /* mantém null */ }
+            if (lucroDia == null) {
+              try {
+                const vendasDia = await api.getVendasPeriodo(ymdHoje, ymdHoje)
+                const arrDia = Array.isArray(vendasDia) ? vendasDia : (vendasDia?.items || [])
+                lucroDia = calcLucro(arrDia)
+              } catch { /* leave null */ }
+            }
+
+            if (lucroMes == null) {
+              try {
+                const vendasMes = await api.getVendasPeriodo(ymdInicioMes, ymdHoje)
+                const arrMes = Array.isArray(vendasMes) ? vendasMes : (vendasMes?.items || [])
+                lucroMes = calcLucro(arrMes)
+              } catch { /* leave null */ }
+            }
+          } catch { /* mantém null */ }
+        }
 
         if (mounted) setMetricas(m => ({
           ...m,
